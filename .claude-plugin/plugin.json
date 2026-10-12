@@ -1,0 +1,20 @@
+{
+  "name": "vfr-chart-optimizer",
+  "version": "0.1.0",
+  "description": "Make huge VFR / aeronautical chart PDFs open fast on laptops and phones without losing any detail, and prove it against the source chart.",
+  "author": {
+    "name": "Tairs Rzajevs"
+  },
+  "license": "MIT",
+  "keywords": [
+    "vfr",
+    "aviation",
+    "aeronautical-chart",
+    "pdf",
+    "optimization",
+    "verification"
+  ],
+  "skills": [
+    "./skills/optimize-vfr-chart"
+  ]
+}

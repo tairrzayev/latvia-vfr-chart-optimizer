@@ -1,0 +1,20 @@
+{
+  "name": "vfr-chart-optimizer",
+  "owner": {
+    "name": "Tairs Rzajevs"
+  },
+  "description": "Skills for working with VFR / aeronautical chart PDFs.",
+  "plugins": [
+    {
+      "name": "vfr-chart-optimizer",
+      "source": "./",
+      "description": "Make huge VFR chart PDFs open fast without losing any detail, verified against the source chart.",
+      "category": "productivity",
+      "keywords": [
+        "vfr",
+        "aviation",
+        "pdf"
+      ]
+    }
+  ]
+}

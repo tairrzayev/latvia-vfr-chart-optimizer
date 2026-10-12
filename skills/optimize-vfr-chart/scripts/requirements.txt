@@ -1,0 +1,7 @@
+# Tested versions. The checkers rely on these engines, so stay on the same major versions.
+pikepdf~=10.16
+shapely~=2.2
+numpy>=2.0,<3
+pymupdf~=1.28
+pypdfium2~=5.14
+pillow>=11

@@ -1,0 +1,11 @@
+# Charts, renders and check reports are large or local outputs; the repo tracks the tooling only.
+*.pdf
+*.png
+*.jpg
+*.raw
+*_checks/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store

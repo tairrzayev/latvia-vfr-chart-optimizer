@@ -1,0 +1,2 @@
+-r ../skills/optimize-vfr-chart/scripts/requirements.txt
+pytest>=8
