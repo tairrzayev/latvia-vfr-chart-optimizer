@@ -114,7 +114,7 @@ detectors run on every tile:
 
 - **ink**: both renders are blurred (Gaussian, sigma 1.5 px), which cancels sub-pixel shifts of
   the same ink. A connected area where a colour channel differs by more than 24 of 255 is a
-  change. On a 15 MB ArcGIS chart, equivalent files stay at 10 to 13 in all three engines.
+  change. On the 15 MB Latvian chart, equivalent files stay at 10 to 13 in all three engines.
 - **area**: the mean signed colour difference over 4 pt squares. More than 12 is a change. This
   catches a lighter or darker tint over an area, such as a stipple band an engine failed to draw.
 
@@ -183,8 +183,9 @@ defect is a real visible change.
 
 ## Limits
 
-- Single-page charts only. The optimizer is tuned to ArcGIS/ArcMap exports and refuses
-  structures it does not understand; other producers will mostly be refused rather than broken.
+- Built and tested on the Latvian VFR chart only. Other charts are untested: the optimizer is
+  tuned to its ArcGIS/ArcMap structure (one page) and refuses anything it does not understand, so
+  other charts will mostly be refused rather than broken.
 - Georeferencing (`/VP`) is copied unchanged and checked byte for byte, but not tested in GPS
   apps.
 - CoreGraphics is only available on macOS. Elsewhere `render_compare.py` uses PDFium and MuPDF.

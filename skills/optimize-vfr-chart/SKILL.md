@@ -1,6 +1,6 @@
 ---
 name: optimize-vfr-chart
-description: Make a huge vector VFR/aeronautical chart PDF (ArcGIS/ArcMap export, such as the Latvian ICAO 1:500 000 VFR chart) open several times faster on laptops, phones and tablets without losing any detail, then prove nothing was lost by comparing it against the source chart with an exact geometric checker, three PDF rendering engines and planted-defect tests, and optionally a visual diff map (golden-test style) to inspect in a browser. Can download the currently effective chart from the Latvian AIS website or use a PDF the user provides. Use when the user wants to optimize, speed up, slim down or fix lag in a VFR chart, aeronautical chart or very large map PDF, or asks for the latest VFR chart in a fast-opening form.
+description: Make the huge vector Latvian VFR chart PDF (ICAO 1:500 000, an ArcGIS/ArcMap export) open several times faster on laptops, phones and tablets without losing any detail, then prove nothing was lost by comparing it against the source chart with an exact geometric checker, three PDF rendering engines and planted-defect tests, and optionally a visual diff map (golden-test style) to inspect in a browser. Can download the currently effective chart from the Latvian AIS website or use a PDF the user provides. Use when the user wants to optimize, speed up, slim down or fix lag in the Latvian VFR chart or a similar VFR/aeronautical chart PDF, or asks for the latest Latvian VFR chart in a fast-opening form.
 ---
 
 # Optimize a VFR chart PDF

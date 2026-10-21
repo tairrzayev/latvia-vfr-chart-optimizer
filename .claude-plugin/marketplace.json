@@ -1,17 +1,18 @@
 {
-  "name": "vfr-chart-optimizer",
+  "name": "latvia-vfr-chart-optimizer",
   "owner": {
     "name": "Tairs Rzajevs"
   },
-  "description": "Skills for working with VFR / aeronautical chart PDFs.",
+  "description": "Skills for working with the Latvian VFR chart.",
   "plugins": [
     {
-      "name": "vfr-chart-optimizer",
+      "name": "latvia-vfr-chart-optimizer",
       "source": "./",
-      "description": "Make huge VFR chart PDFs open fast without losing any detail, verified against the source chart.",
+      "description": "Make the Latvian VFR chart PDF open fast without losing any detail, verified against the source chart.",
       "category": "productivity",
       "keywords": [
         "vfr",
+        "latvia",
         "aviation",
         "pdf"
       ]

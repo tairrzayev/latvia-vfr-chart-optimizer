@@ -1,13 +1,16 @@
 {
-  "name": "vfr-chart-optimizer",
+  "name": "latvia-vfr-chart-optimizer",
   "version": "0.1.0",
-  "description": "Make huge VFR / aeronautical chart PDFs open fast on laptops and phones without losing any detail, and prove it against the source chart.",
+  "description": "Make the Latvian VFR chart PDF open fast on laptops and phones without losing any detail, and prove it against the source chart.",
   "author": {
     "name": "Tairs Rzajevs"
   },
+  "homepage": "https://github.com/tairrzayev/latvia-vfr-chart-optimizer",
+  "repository": "https://github.com/tairrzayev/latvia-vfr-chart-optimizer",
   "license": "MIT",
   "keywords": [
     "vfr",
+    "latvia",
     "aviation",
     "aeronautical-chart",
     "pdf",

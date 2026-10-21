@@ -1,10 +1,10 @@
-# VFR Chart Optimizer
+# Latvia VFR Chart Optimizer
 
-An agent skill that makes huge vector VFR chart PDFs open fast on laptops, phones and tablets,
+An agent skill that makes the Latvian VFR chart PDF open fast on laptops, phones and tablets,
 and then proves, against the source chart, that nothing was lost.
 
-Official digital VFR charts exported from ArcGIS can be painfully slow: the Latvian ICAO
-1:500 000 chart is a single 141 x 62 cm page with 227 MB of drawing instructions, most of them
+The official digital chart is painfully slow to open: the Latvian ICAO 1:500 000 VFR chart,
+exported from ArcGIS, is a single 141 x 62 cm page with 227 MB of drawing instructions, most of them
 dots and hatch lines that are masked away and never visible. This skill removes the invisible
 work and restructures the rest so viewers can skip what is off screen. Every layer, label,
 symbol, colour, the georeferencing and the metadata stay exactly as published.
@@ -48,8 +48,8 @@ checks.
 As a Claude Code plugin:
 
 ```bash
-claude plugin marketplace add <github-user>/<this-repo>
-claude plugin install vfr-chart-optimizer@vfr-chart-optimizer
+claude plugin marketplace add tairrzayev/latvia-vfr-chart-optimizer
+claude plugin install latvia-vfr-chart-optimizer@latvia-vfr-chart-optimizer
 ```
 
 Or copy `skills/optimize-vfr-chart/` into `~/.claude/skills/` (all projects) or a project's
@@ -89,10 +89,11 @@ How each step works, and why each change is safe:
 
 ## Scope
 
-Built for single-page charts exported by ArcGIS/ArcMap. Anything the optimizer or the checkers do
-not understand (transparency, dash patterns, shadings, multi-page files, ...) makes them stop
-instead of guessing. Other countries' charts with the same structure should work; the AIS
-download is specific to Latvia.
+Built and tested on the Latvian ICAO 1:500 000 VFR chart (the 3 Sep and 29 Oct 2026 issues),
+which ArcGIS/ArcMap exports as one page. Other charts are untested. Anything the optimizer or the
+checkers do not understand (transparency, dash patterns, shadings, multi-page files, ...) makes
+them stop instead of guessing, so a different chart is more likely to be refused than broken. The
+AIS download only knows the Latvian AIS page.
 
 ## Development
 
