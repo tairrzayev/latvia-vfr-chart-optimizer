@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chart diff map</title>
+<style>
+  :root {
+    --bg: #f4f4f5; --panel: #ffffff; --text: #18181b; --muted: #5f5f68; --line: #dcdce0;
+    --accent: #2563eb; --ok: #15803d; --bad: #b91c1c; --view: #c8c8cd;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161618; --panel: #1f1f22; --text: #ececee; --muted: #a0a0a8; --line: #36363c;
+      --accent: #3b82f6; --ok: #4ade80; --bad: #f87171; --view: #0c0c0e;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: grid; grid-template: "bar bar" auto "view side" minmax(0, 1fr) / minmax(0, 1fr) 340px;
+    background: var(--bg); color: var(--text);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    grid-area: bar; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+    padding: 8px 14px; background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  header h1 { font-size: 15px; margin: 0 4px 0 0; white-space: nowrap; }
+  #view { grid-area: view; position: relative; overflow: hidden; background: var(--view); touch-action: none; }
+  #view canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; }
+  #view canvas.dragging { cursor: grabbing; }
+  #view canvas.divider { cursor: ew-resize; }
+  #where {
+    position: absolute; left: 8px; bottom: 8px; padding: 2px 8px; border-radius: 6px;
+    background: rgb(0 0 0 / 0.62); color: #fff; pointer-events: none;
+    font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  #where:empty { display: none; }
+  aside { grid-area: side; overflow: auto; padding: 14px; background: var(--panel); border-left: 1px solid var(--line); }
+  @media (max-width: 820px) {
+    body { grid-template: "bar" auto "view" minmax(0, 1fr) "side" minmax(0, 40vh) / minmax(0, 1fr); }
+    aside { border-left: 0; border-top: 1px solid var(--line); }
+  }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { font: inherit; color: inherit; background: transparent; border: 0; padding: 5px 10px; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+  select {
+    font: inherit; color: inherit; background: var(--panel); padding: 4px 6px;
+    border: 1px solid var(--line); border-radius: 8px;
+  }
+  label.check { display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 20px 0 6px; }
+  aside > h2:first-child { margin-top: 0; }
+  p { margin: 6px 0; }
+  .verdict { padding: 8px 10px; border-radius: 8px; font-weight: 600; }
+  .verdict.ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }
+  .verdict.bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 14%, transparent); }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  td { padding: 3px 4px; border-bottom: 1px solid var(--line); }
+  td.n { text-align: right; white-space: nowrap; }
+  .sw { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  ol.places { list-style: none; margin: 0; padding: 0; }
+  ol.places button {
+    display: block; width: 100%; text-align: left; font: inherit; color: inherit; background: transparent;
+    border: 0; border-radius: 6px; padding: 4px 6px; cursor: pointer; font-variant-numeric: tabular-nums;
+  }
+  ol.places button:hover, ol.places button.sel { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+  .muted { color: var(--muted); }
+  .mono { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
+  kbd { font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Chart diff map</h1>
+  <select id="engine" aria-label="Rendering engine"></select>
+  <div class="seg" id="modes" role="group" aria-label="View">
+    <button data-mode="diff" title="Differing pixels over the faded source (1)">Diff</button>
+    <button data-mode="side" title="Source and optimized next to each other (2)">Side by side</button>
+    <button data-mode="swipe" title="Drag the divider across (3)">Swipe</button>
+    <button data-mode="blink" title="Alternate source and optimized (4, Space pauses)">Blink</button>
+  </div>
+  <label class="check diffOnly"><input type="checkbox" id="faint" checked> Show 1-2 level differences</label>
+  <label class="check diffOnly"><input type="checkbox" id="hide"> Hide chart</label>
+  <div class="seg" role="group" aria-label="Zoom">
+    <button id="zoomOut" title="Zoom out (-)">&minus;</button>
+    <button id="fit" title="Whole page (F)">Fit</button>
+    <button id="zoomIn" title="Zoom in (+)">+</button>
+  </div>
+</header>
+<div id="view"><canvas id="canvas"></canvas><div id="where"></div></div>
+<aside id="side"></aside>
+<script id="map-data" type="application/json">__MAP_DATA__</script>
+<script>
+'use strict';
+const MAP = JSON.parse(document.getElementById('map-data').textContent);
+const canvas = document.getElementById('canvas'), ctx = canvas.getContext('2d');
+const view = document.getElementById('view'), side = document.getElementById('side'), where = document.getElementById('where');
+const S = { engine: Object.keys(MAP.engines)[0], mode: 'diff', cx: 0, cy: 0, z: 1, swipe: 0.5,
+            phase: 0, paused: false, hide: false, faint: true, place: -1 };
+const cache = new Map();
+let dpr = 1, W = 0, H = 0, queued = false;
+
+const E = () => MAP.engines[S.engine];
+const fmt = n => n.toLocaleString('en-US');
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const places = () => [...E().changes.map(c => ({ ...c, change: true })), ...E().spots];
+const isOverlay = layer => layer === 'diff' || layer === 'strong';
+const colourOf = d => (MAP.buckets.find(b => d >= b.lo && d <= b.hi) || MAP.buckets[MAP.buckets.length - 1]).colour;
+
+function schedule() { if (!queued) { queued = true; requestAnimationFrame(draw); } }
+
+// Tiles ----------------------------------------------------------------------------------------
+function tile(layer, L, i) {
+  const name = E().levels[L][layer][i];
+  if (!name) return null;
+  const url = 'tiles/' + name + (isOverlay(layer) ? '.png' : '.' + MAP.ext);
+  let im = cache.get(url);
+  if (im) { cache.delete(url); cache.set(url, im); }
+  else {
+    im = new Image();
+    im.onload = schedule;
+    im.src = url;
+    cache.set(url, im);
+    if (cache.size > 1500) {
+      let k = 0;
+      for (const key of cache.keys()) { if (k++ >= 500) break; cache.delete(key); }
+    }
+  }
+  return im.complete && im.naturalWidth ? im : null;
+}
+
+// Geometry: image pixels (finest level) <-> CSS pixels of a pane -----------------------------
+function panes() {
+  if (S.mode !== 'side') return [{ x: 0, y: 0, w: W, h: H }];
+  const gap = 4;
+  if (W >= H) {
+    const w = (W - gap) / 2;
+    return [{ x: 0, y: 0, w, h: H, layer: 'source' }, { x: w + gap, y: 0, w, h: H, layer: 'optimized' }];
+  }
+  const h = (H - gap) / 2;
+  return [{ x: 0, y: 0, w: W, h, layer: 'source' }, { x: 0, y: h + gap, w: W, h, layer: 'optimized' }];
+}
+const paneAt = (x, y) => panes().find(p => x >= p.x && x <= p.x + p.w && y >= p.y && y <= p.y + p.h) || panes()[0];
+const toImage = (p, x, y) => [S.cx + (x - p.x - p.w / 2) / S.z, S.cy + (y - p.y - p.h / 2) / S.z];
+const toScreen = (p, ix, iy) => [p.x + p.w / 2 + (ix - S.cx) * S.z, p.y + p.h / 2 + (iy - S.cy) * S.z];
+
+function fitZoom() {
+  const p = panes()[0];
+  return Math.min(p.w / E().width, p.h / E().height) * 0.97;
+}
+function fit() { S.z = fitZoom(); S.cx = E().width / 2; S.cy = E().height / 2; schedule(); }
+function zoomAt(x, y, f) {
+  const p = paneAt(x, y), [ix, iy] = toImage(p, x, y);
+  S.z = Math.min(48, Math.max(fitZoom() / 3, S.z * f));
+  S.cx = ix - (x - p.x - p.w / 2) / S.z;
+  S.cy = iy - (y - p.y - p.h / 2) / S.z;
+  schedule();
+}
+
+// Drawing ---------------------------------------------------------------------------------------
+function drawLayer(layer, p) {
+  const e = E(), T = MAP.tile, last = e.levels.length - 1;
+  // Chart tiles: the coarsest level that still has a pixel per device pixel. Difference tiles: the
+  // finest level whose pixels are at least one device pixel, so no differing pixel is lost.
+  const f = Math.log2(1 / (S.z * dpr));
+  const L = Math.max(0, Math.min(last, isOverlay(layer) ? Math.ceil(f - 1e-9) : Math.floor(f + 1e-9)));
+  const lv = e.levels[L], k = 2 ** L, span = T * k;
+  const [ix0, iy0] = toImage(p, p.x, p.y), [ix1, iy1] = toImage(p, p.x + p.w, p.y + p.h);
+  const tx0 = Math.max(0, Math.floor(ix0 / span)), tx1 = Math.min(lv.cols - 1, Math.floor(ix1 / span));
+  const ty0 = Math.max(0, Math.floor(iy0 / span)), ty1 = Math.min(lv.rows - 1, Math.floor(iy1 / span));
+  ctx.imageSmoothingEnabled = !isOverlay(layer) && S.z * dpr * k < 2;
+  for (let ty = ty0; ty <= ty1; ty++) {
+    for (let tx = tx0; tx <= tx1; tx++) {
+      const tw = Math.min(T, lv.w - tx * T), th = Math.min(T, lv.h - ty * T);
+      const [sx0, sy0] = toScreen(p, tx * span, ty * span), [sx1, sy1] = toScreen(p, tx * span + tw * k, ty * span + th * k);
+      const X0 = Math.round(sx0 * dpr), Y0 = Math.round(sy0 * dpr), X1 = Math.round(sx1 * dpr), Y1 = Math.round(sy1 * dpr);
+      if (isOverlay(layer)) {
+        const im = tile(layer, L, ty * lv.cols + tx);
+        if (im) ctx.drawImage(im, X0, Y0, X1 - X0, Y1 - Y0);
+        continue;
+      }
+      // While a tile loads, draw the matching part of the nearest coarser tile that is ready.
+      for (let a = 0; L + a <= last; a++) {
+        const up = e.levels[L + a], px = tx >> a, py = ty >> a, s = 2 ** a;
+        const im = tile(layer, L + a, py * up.cols + px);
+        if (!im) continue;
+        ctx.drawImage(im, (tx * T) / s - px * T, (ty * T) / s - py * T, tw / s, th / s, X0, Y0, X1 - X0, Y1 - Y0);
+        break;
+      }
+    }
+  }
+}
+
+function pageRect(p) {
+  const [x0, y0] = toScreen(p, 0, 0), [x1, y1] = toScreen(p, E().width, E().height);
+  return [x0 * dpr, y0 * dpr, (x1 - x0) * dpr, (y1 - y0) * dpr];
+}
+
+function badge(text, x, y, colour, right) {
+  ctx.font = `600 ${12 * dpr}px system-ui, -apple-system, sans-serif`;
+  const w = ctx.measureText(text).width + 14 * dpr, h = 22 * dpr;
+  const bx = right ? x - w : x;
+  ctx.fillStyle = colour || 'rgba(0, 0, 0, 0.66)';
+  ctx.fillRect(bx, y, w, h);
+  ctx.fillStyle = '#fff';
+  ctx.fillText(text, bx + 7 * dpr, y + 15 * dpr);
+}
+
+function marks(p) {
+  const e = E();
+  ctx.lineWidth = 2 * dpr;
+  e.changes.forEach((c, i) => {
+    let [x0, y0] = toScreen(p, c.box[0], c.box[1]), [x1, y1] = toScreen(p, c.box[2], c.box[3]);
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, rx = Math.max(10, (x1 - x0) / 2 + 3), ry = Math.max(10, (y1 - y0) / 2 + 3);
+    ctx.strokeStyle = '#dc2626';
+    ctx.strokeRect((cx - rx) * dpr, (cy - ry) * dpr, 2 * rx * dpr, 2 * ry * dpr);
+    ctx.fillStyle = '#dc2626';
+    ctx.font = `700 ${12 * dpr}px system-ui, sans-serif`;
+    ctx.fillText(String(i + 1), (cx + rx + 3) * dpr, (cy - ry + 10) * dpr);
+  });
+  const sel = places()[S.place];
+  if (sel && !sel.change) {
+    const [x, y] = toScreen(p, sel.x + 0.5, sel.y + 0.5), r = Math.max(14, S.z * 3);
+    ctx.setLineDash([5 * dpr, 4 * dpr]);
+    ctx.strokeStyle = '#2563eb';
+    ctx.beginPath(); ctx.arc(x * dpr, y * dpr, r * dpr, 0, 2 * Math.PI); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+function draw() {
+  queued = false;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  for (const p of panes()) {
+    ctx.save();
+    ctx.beginPath(); ctx.rect(p.x * dpr, p.y * dpr, p.w * dpr, p.h * dpr); ctx.clip();
+    if (S.mode === 'diff') {
+      const r = pageRect(p);
+      if (S.hide) {
+        ctx.fillStyle = '#000'; ctx.fillRect(...r);
+      } else {
+        drawLayer('source', p);
+        ctx.globalCompositeOperation = 'saturation';  // grey, then faded, as in the overview image
+        ctx.fillStyle = '#808080'; ctx.fillRect(...r);
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)'; ctx.fillRect(...r);
+      }
+      drawLayer(S.faint ? 'diff' : 'strong', p);
+    } else if (S.mode === 'side') {
+      drawLayer(p.layer, p);
+    } else if (S.mode === 'swipe') {
+      drawLayer('source', p);
+      ctx.save();
+      ctx.beginPath(); ctx.rect(Math.round(S.swipe * W * dpr), 0, canvas.width, canvas.height); ctx.clip();
+      drawLayer('optimized', p);
+      ctx.restore();
+    } else {
+      drawLayer(S.phase ? 'optimized' : 'source', p);
+    }
+    marks(p);
+    ctx.restore();
+    if (S.mode === 'side') badge(p.layer === 'source' ? 'Source' : 'Optimized', (p.x + 8) * dpr, (p.y + 8) * dpr);
+  }
+  if (S.mode === 'swipe') {
+    const x = Math.round(S.swipe * W * dpr);
+    ctx.fillStyle = '#2563eb';
+    ctx.fillRect(x - dpr, 0, 2 * dpr, canvas.height);
+    ctx.beginPath(); ctx.arc(x, canvas.height / 2, 11 * dpr, 0, 2 * Math.PI);
+    ctx.fillStyle = '#fff'; ctx.fill();
+    ctx.strokeStyle = '#2563eb'; ctx.lineWidth = 2 * dpr; ctx.stroke();
+    ctx.fillStyle = '#2563eb';
+    for (const dir of [-1, 1]) {  // arrows on the handle
+      ctx.beginPath();
+      ctx.moveTo(x + dir * 7 * dpr, canvas.height / 2);
+      ctx.lineTo(x + dir * 2 * dpr, canvas.height / 2 - 4 * dpr);
+      ctx.lineTo(x + dir * 2 * dpr, canvas.height / 2 + 4 * dpr);
+      ctx.fill();
+    }
+    badge('Source', 8 * dpr, 8 * dpr);
+    badge('Optimized', (W - 8) * dpr, 8 * dpr, null, true);
+  }
+  if (S.mode === 'blink') {
+    badge((S.phase ? 'OPTIMIZED' : 'SOURCE') + (S.paused ? '  (paused, Space to resume)' : ''),
+          8 * dpr, 8 * dpr, S.phase ? '#2563eb' : '#3f3f46');
+  }
+}
+
+// Side panel ------------------------------------------------------------------------------------
+function renderSide() {
+  const e = E(), st = e.stats, n = e.changes.length;
+  const identical = Math.floor(10000 * st.identical / st.pixels) / 100;
+  const rows = MAP.buckets.map((b, i) =>
+    `<tr><td><span class="sw" style="background:${b.colour}"></span>${b.lo} to ${b.hi}</td>` +
+    `<td class="n">${fmt(st.buckets[i])}</td><td class="n muted">${(100 * st.buckets[i] / st.pixels).toFixed(3)}%</td></tr>`).join('');
+  const list = (items, offset) => items.map((s, i) => {
+    const label = s.change
+      ? `${i + 1}. ${s.kind} change at x ${s.x_pt}, y ${s.y_pt} pt, peak ${s.peak}`
+      : `${i + 1}. x ${s.x_pt}, y ${s.y_pt} pt: up to ${s.peak}, ${fmt(s.pixels)} px`;
+    const sw = s.change ? '#dc2626' : colourOf(s.peak);
+    return `<li><button data-place="${offset + i}"><span class="sw" style="background:${sw}"></span>${label}</button></li>`;
+  }).join('');
+  const f = MAP.files, dpi = Math.round(MAP.scale * 72);
+  side.innerHTML = `
+    <h2>${esc(e.label)}</h2>
+    <div class="verdict ${n ? 'bad' : 'ok'}">${n
+      ? `${e.check.changes} change${e.check.changes > 1 ? 's' : ''} found by the render check`
+      : 'No change found by the render check'}</div>
+    <p>${identical}% of ${fmt(st.pixels)} pixels are identical. Largest difference after blurring:
+      ${e.check.max_blurred} (a change is above ${MAP.thresholds.ink}). Largest mean over a 4 pt square:
+      ${e.check.max_area} (a change is above ${MAP.thresholds.area}).</p>
+    <h2>Differing pixels, by how much (of 255)</h2>
+    <table>${rows}</table>
+    ${n ? `<h2>Changes found</h2><ol class="places">${list(places().slice(0, n), 0)}</ol>` : ''}
+    <h2>Largest pixel differences</h2>
+    ${e.spots.length ? `<ol class="places">${list(e.spots, n)}</ol>` : '<p class="muted">None: every pixel is identical.</p>'}
+    <h2>How to read this</h2>
+    <p>The source chart is the reference, like the golden image of a golden test. In <b>Diff</b> the source is
+      faded to grey and every pixel of the optimized render that differs is coloured by how much it differs.
+      Zoomed out, a coloured pixel stands for the largest difference in the area it covers, so a single
+      differing pixel is never hidden.</p>
+    <p>Files that paint the same shapes still differ slightly, because anti-aliasing is computed from
+      slightly different coordinates: by 1 or 2 levels where shapes were moved into groups or lines were
+      shortened outside their clip mask, and by more at single pixels along thin lines and where a line was
+      cut into pieces. Engines vary this much on their own: the source chart drawn as part of a smaller or
+      larger region differs from itself by up to about 145 at single pixels. Missing or added content is a
+      solid patch of strong colour in the shape of a symbol or label, and the render check marks it with a
+      numbered red box. <b>Blink</b> and <b>Swipe</b> show the two renders themselves.</p>
+    <h2>Controls</h2>
+    <p>Drag to pan. Scroll, pinch or double-click to zoom (Shift and double-click zooms out).
+      <kbd>1</kbd> to <kbd>4</kbd> views, <kbd>Space</kbd> pause blinking, <kbd>F</kbd> whole page,
+      <kbd>N</kbd> / <kbd>P</kbd> next or previous place.</p>
+    <h2>Files</h2>
+    <p>Source: ${esc(f.source.name)}, ${fmt(f.source.bytes)} bytes<br><span class="mono muted">SHA-256 ${f.source.sha256}</span></p>
+    <p>Optimized: ${esc(f.optimized.name)}, ${fmt(f.optimized.bytes)} bytes<br><span class="mono muted">SHA-256 ${f.optimized.sha256}</span></p>
+    <p class="muted">Rendered at ${dpi} dpi, ${fmt(e.width)} x ${fmt(e.height)} px.</p>`;
+  side.querySelectorAll('[data-place]').forEach(b => b.addEventListener('click', () => go(+b.dataset.place)));
+  markPlace();
+}
+
+function markPlace() {
+  side.querySelectorAll('[data-place]').forEach(b => b.classList.toggle('sel', +b.dataset.place === S.place));
+}
+
+function go(i) {
+  const all = places();
+  if (!all.length) return;
+  S.place = (i + all.length) % all.length;
+  const s = all[S.place], p = panes()[0];
+  if (s.change) {
+    const [x0, y0, x1, y1] = s.box;
+    S.cx = (x0 + x1) / 2; S.cy = (y0 + y1) / 2;
+    S.z = Math.min(8, p.w / ((x1 - x0) * 4 + 40), p.h / ((y1 - y0) * 4 + 40));
+  } else {
+    S.cx = s.x + 0.5; S.cy = s.y + 0.5; S.z = 8;
+  }
+  markPlace();
+  const btn = side.querySelector(`[data-place="${S.place}"]`);
+  if (btn) btn.scrollIntoView({ block: 'nearest' });
+  schedule();
+}
+
+// Controls --------------------------------------------------------------------------------------
+function setMode(m) {
+  S.mode = m;
+  document.querySelectorAll('#modes button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
+  document.querySelectorAll('.diffOnly').forEach(el => { el.hidden = m !== 'diff'; });
+  schedule();
+}
+
+function resize() {
+  dpr = window.devicePixelRatio || 1;
+  W = view.clientWidth; H = view.clientHeight;
+  canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+  schedule();
+}
+
+function hover(x, y) {
+  const [ix, iy] = toImage(paneAt(x, y), x, y), e = E();
+  if (ix < 0 || iy < 0 || ix > e.width || iy > e.height) { where.textContent = ''; return; }
+  const [rx, ry, , rh] = MAP.region;
+  where.textContent = `x ${(rx + ix / MAP.scale).toFixed(1)} pt, y ${(ry + rh - iy / MAP.scale).toFixed(1)} pt, zoom ${S.z.toFixed(2)}`;
+}
+
+const pointers = new Map();
+let dragging = null;
+const nearDivider = x => S.mode === 'swipe' && Math.abs(x - S.swipe * W) < 18;
+canvas.addEventListener('pointerdown', e => {
+  canvas.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, [e.offsetX, e.offsetY]);
+  dragging = pointers.size === 1 && nearDivider(e.offsetX) ? 'swipe' : 'pan';
+  canvas.classList.add('dragging');
+});
+canvas.addEventListener('pointermove', e => {
+  const cur = [e.offsetX, e.offsetY], prev = pointers.get(e.pointerId);
+  canvas.classList.toggle('divider', !prev && nearDivider(cur[0]));
+  if (prev) {
+    if (pointers.size === 1 && dragging === 'swipe') {
+      S.swipe = Math.min(1, Math.max(0, cur[0] / W));
+    } else if (pointers.size === 1) {
+      S.cx -= (cur[0] - prev[0]) / S.z; S.cy -= (cur[1] - prev[1]) / S.z;
+    } else if (pointers.size === 2) {
+      const other = [...pointers].find(([id]) => id !== e.pointerId)[1];
+      const d0 = Math.hypot(prev[0] - other[0], prev[1] - other[1]), d1 = Math.hypot(cur[0] - other[0], cur[1] - other[1]);
+      const m0 = [(prev[0] + other[0]) / 2, (prev[1] + other[1]) / 2], m1 = [(cur[0] + other[0]) / 2, (cur[1] + other[1]) / 2];
+      S.cx -= (m1[0] - m0[0]) / S.z; S.cy -= (m1[1] - m0[1]) / S.z;
+      if (d0 > 0) zoomAt(m1[0], m1[1], d1 / d0);
+    }
+    pointers.set(e.pointerId, cur);
+    schedule();
+  }
+  hover(cur[0], cur[1]);
+});
+const release = e => {
+  pointers.delete(e.pointerId);
+  if (!pointers.size) { dragging = null; canvas.classList.remove('dragging'); } else dragging = 'pan';
+};
+canvas.addEventListener('pointerup', release);
+canvas.addEventListener('pointercancel', release);
+canvas.addEventListener('pointerleave', () => { if (!pointers.size) where.textContent = ''; });
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const dy = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
+  zoomAt(e.offsetX, e.offsetY, Math.exp(-dy * (e.ctrlKey ? 0.01 : 0.0015)));
+  hover(e.offsetX, e.offsetY);
+}, { passive: false });
+canvas.addEventListener('dblclick', e => zoomAt(e.offsetX, e.offsetY, e.shiftKey ? 0.5 : 2));
+
+document.querySelectorAll('#modes button').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+document.getElementById('hide').addEventListener('change', e => { S.hide = e.target.checked; schedule(); });
+document.getElementById('faint').addEventListener('change', e => { S.faint = e.target.checked; schedule(); });
+document.getElementById('fit').addEventListener('click', fit);
+document.getElementById('zoomIn').addEventListener('click', () => zoomAt(W / 2, H / 2, 2));
+document.getElementById('zoomOut').addEventListener('click', () => zoomAt(W / 2, H / 2, 0.5));
+const engineSelect = document.getElementById('engine');
+for (const [key, e] of Object.entries(MAP.engines)) engineSelect.add(new Option(e.label, key));
+engineSelect.addEventListener('change', () => { S.engine = engineSelect.value; S.place = -1; renderSide(); schedule(); });
+
+addEventListener('keydown', e => {
+  const typing = e.target.tagName === 'SELECT' || (e.target.tagName === 'INPUT' && e.target.type !== 'checkbox');
+  if (e.metaKey || e.ctrlKey || e.altKey || typing) return;
+  const modes = { 1: 'diff', 2: 'side', 3: 'swipe', 4: 'blink' };
+  if (modes[e.key]) setMode(modes[e.key]);
+  else if (e.key === ' ' && S.mode === 'blink') { S.paused = !S.paused; e.preventDefault(); schedule(); }
+  else if (e.key === 'f' || e.key === 'F' || e.key === '0') fit();
+  else if (e.key === '+' || e.key === '=') zoomAt(W / 2, H / 2, 2);
+  else if (e.key === '-') zoomAt(W / 2, H / 2, 0.5);
+  else if (e.key === 'n' || e.key === 'N') go(S.place + 1);
+  else if (e.key === 'p' || e.key === 'P') go(S.place - 1);
+});
+
+setInterval(() => { if (S.mode === 'blink' && !S.paused) { S.phase ^= 1; schedule(); } }, 700);
+new ResizeObserver(resize).observe(view);
+resize();
+setMode('diff');
+renderSide();
+fit();
+</script>
+</body>
+</html>

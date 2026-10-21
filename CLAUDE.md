@@ -11,6 +11,9 @@ skill is also available when working inside this repo.
 - `skills/optimize-vfr-chart/scripts/stages/`: the optimizer, one stage per file.
 - `skills/optimize-vfr-chart/scripts/verify_chart.py`, `render_compare.py`, `mutation_test.py`:
   the checkers.
+- `skills/optimize-vfr-chart/scripts/diff_map.py` and `diff_map.html`: the visual diff map that
+  `render_compare.py --diff-map` writes (a report for people, not a check). The viewer is one
+  self-contained page: no external scripts, styles or fonts, so it works offline from the folder.
 - `tests/`: pytest suite on a synthetic chart (`tests/make_chart.py`), no real chart needed.
 
 ## Rules

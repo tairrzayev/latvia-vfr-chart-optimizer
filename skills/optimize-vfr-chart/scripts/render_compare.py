@@ -2,6 +2,7 @@
 
 usage: render_compare.py SOURCE.pdf OPTIMIZED.pdf [--engines pdfium,mupdf,coregraphics]
                          [--scale 3] [--tile 500] [--region x,y,w,h] [--out DIR] [--json FILE]
+                         [--diff-map DIR]
 
 Engines: PDFium (Chrome, Android, many apps), MuPDF, and CoreGraphics (Preview, Safari, iOS;
 macOS only, built on first use with swiftc). Each engine renders both files over the whole page
@@ -19,6 +20,9 @@ appears or disappears. Two detectors run on every tile:
   that an engine failed to draw.
 
 Every change is reported with a side-by-side crop (source | optimized | difference) for review.
+--diff-map DIR also writes a visual diff map of the whole page from the same renders (see
+diff_map.py): a zoomable viewer with difference, side-by-side, swipe and blink views, and an
+overview image per engine.
 Single dots smaller than about a pixel, and colour shifts of a few percent, stay below these
 thresholds; verify_chart.py is the check for those.
 
@@ -181,13 +185,15 @@ def area_diff(a, b, block):
     return np.abs(d.reshape(H // block, block, W // block, block, 3).mean((1, 3))).max(2)
 
 
-def compare_engine(name, src, opt, regions, scale, threshold, area_threshold, out_dir, report):
+def compare_engine(name, src, opt, regions, scale, threshold, area_threshold, out_dir, report, dmap=None):
     t = time.time()
     s_eng, o_eng = make_engine(name, src), make_engine(name, opt)
     block = max(4, round(4 * scale))  # 4 pt squares
     stats = dict(tiles=len(regions), pixels=0, px_diff=0, px_diff_gt16=0, px_diff_gt64=0, max_diff=0, max_blurred=0,
                  max_area=0.0, blobs=0)
     worst = []
+    if dmap:
+        dmap.start(name)
     if name == 'coregraphics':
         def pairs():
             for k in range(0, len(regions), 8):
@@ -203,6 +209,8 @@ def compare_engine(name, src, opt, regions, scale, threshold, area_threshold, ou
         if a.shape != b.shape:
             raise SystemExit(f'{name}: render sizes differ for region {r}')
         d = np.abs(a.astype(np.int16) - b.astype(np.int16)).max(2)
+        if dmap:
+            dmap.add(r, a, b, d.astype(np.uint8))
         stats['pixels'] += d.size
         stats['px_diff'] += int((d > 0).sum())
         stats['px_diff_gt16'] += int((d > 16).sum())
@@ -222,6 +230,8 @@ def compare_engine(name, src, opt, regions, scale, threshold, area_threshold, ou
                    (p0 * block, q0 * block, (p1 + 1) * block - 1, (q1 + 1) * block - 1), 'area')
                   for n, p0, q0, p1, q1 in blobs(ad > area_threshold)]
         for peak, n, (by0, bx0, by1, bx1), what in found:
+            if dmap:
+                dmap.change(r, (by0, bx0, by1, bx1), what, peak)
             px, py = r[0] + (bx0 + bx1) / 2 / scale, r[1] + r[3] - (by0 + by1) / 2 / scale
             stats['blobs'] += 1
             worst.append((peak, n, px, py, r, (by0, bx0, by1, bx1), a, b, what))
@@ -232,6 +242,8 @@ def compare_engine(name, src, opt, regions, scale, threshold, area_threshold, ou
         p = os.path.join(out_dir, f'{name}_{k:02d}_x{px:.0f}_y{py:.0f}.png')
         save_crop(a, b, box, p)
         crops.append(dict(kind=what, x_pt=round(px, 1), y_pt=round(py, 1), peak=round(peak), pixels=n, crop=p))
+    del s_eng, o_eng  # release both parsed files before the diff map is encoded
+    overview = dmap.finish(stats) if dmap else None
     stats['seconds'] = round(time.time() - t, 1)
     report['engines'][name] = dict(stats, blobs_detail=crops)
     flag = 'OK ' if not stats['blobs'] else 'BAD'
@@ -241,6 +253,8 @@ def compare_engine(name, src, opt, regions, scale, threshold, area_threshold, ou
           f'changes found: {stats["blobs"]}  ({stats["seconds"]}s)', flush=True)
     for c in crops[:5]:
         print(f'      {c["kind"]} change at x={c["x_pt"]} y={c["y_pt"]} pt, peak {c["peak"]}, {c["pixels"]} px -> {c["crop"]}')
+    if overview:
+        print(f'      diff map overview -> {overview}', flush=True)
 
 
 def timing(name, path, width_px=1600):
@@ -274,6 +288,7 @@ def main():
     ap.add_argument('--out', default=None, help='directory for blob crops (default: a new temp dir)')
     ap.add_argument('--json', help='write the report as JSON here')
     ap.add_argument('--no-timing', action='store_true')
+    ap.add_argument('--diff-map', metavar='DIR', help='also write a visual diff map (viewer and overview images) to this new directory')
     a = ap.parse_args()
     import pikepdf
     with pikepdf.open(a.source) as p:
@@ -282,12 +297,17 @@ def main():
     out_dir = a.out or tempfile.mkdtemp(prefix='render-compare-')
     os.makedirs(out_dir, exist_ok=True)
     regions = tiles(region, a.tile)
+    dmap = None
+    if a.diff_map:
+        sys.path.insert(0, HERE)
+        from diff_map import DiffMap
+        dmap = DiffMap(a.diff_map, a.source, a.optimized, region, a.scale)
     report = dict(engines={}, timing={}, scale=a.scale, threshold=a.threshold, area_threshold=a.area_threshold,
                   region=region, crops_dir=out_dir)
     engines = [e for e in a.engines.split(',') if e]
     print(f'comparing at {a.scale}x ({a.scale * 72:.0f} dpi), {len(regions)} tiles, engines: {", ".join(engines)}', flush=True)
     for e in engines:
-        compare_engine(e, a.source, a.optimized, regions, a.scale, a.threshold, a.area_threshold, out_dir, report)
+        compare_engine(e, a.source, a.optimized, regions, a.scale, a.threshold, a.area_threshold, out_dir, report, dmap)
     if not a.no_timing:
         print('time to open + render the whole page 1600 px wide:', flush=True)
         for e in engines:
@@ -296,6 +316,9 @@ def main():
             print(f'  {e:12} source {ts:6.2f}s   optimized {to:6.2f}s   ({ts / max(to, 1e-3):.1f}x faster)', flush=True)
     ok = all(v['blobs'] == 0 for v in report['engines'].values())
     report['status'] = 'PASS' if ok else 'FAIL'
+    if dmap:
+        report['diff_map'] = dmap.write(report)
+        print(f'\ndiff map: {report["diff_map"]} (open it in a browser)')
     print('\nVERDICT:', 'PASS. No engine shows content added or missing.' if ok else
           f'FAIL. Review the crops in {out_dir} (source | optimized | difference).')
     if a.json:

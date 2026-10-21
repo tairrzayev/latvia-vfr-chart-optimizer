@@ -21,6 +21,11 @@ checks pass:
 3. **Planted defects** (`mutation_test.py`). Thirteen kinds of realistic defects are planted in
    copies of the output, and the checkers must catch every one.
 
+To see it for yourself, the rendering comparison can also write a **visual diff map**, like the
+failure images of a golden test: a page that opens offline in any browser and shows the two
+renders as a difference view (differing pixels coloured over the faded source), side by side, as a
+swipe or blinking, zoomable down to single pixels, for each engine.
+
 ## Results on the Latvian VFR chart (15th edition)
 
 | | Source | Optimized |
@@ -62,8 +67,9 @@ Ask your agent, for example:
 - "Optimize ~/Downloads/VFR_Chart.pdf."
 
 It asks whether to download the currently effective chart from the
-[Latvian AIS](https://ais.lgs.lv/page/VFR_Suport) or use your file, then optimizes, runs the three
-checks and reports the result. A file that fails any check is renamed `*.REJECTED.pdf`.
+[Latvian AIS](https://ais.lgs.lv/page/VFR_Suport) or use your file, and whether you want the
+visual diff map, then optimizes, runs the three checks and reports the result. A file that fails
+any check is renamed `*.REJECTED.pdf`.
 
 The scripts also work without an agent:
 
@@ -74,7 +80,7 @@ S=skills/optimize-vfr-chart/scripts
 "$PY" $S/fetch_chart.py                              # download the currently effective one
 "$PY" $S/optimize_chart.py VFR_Chart.pdf             # writes VFR_Chart_optimized.pdf
 "$PY" $S/verify_chart.py VFR_Chart.pdf VFR_Chart_optimized.pdf
-"$PY" $S/render_compare.py VFR_Chart.pdf VFR_Chart_optimized.pdf
+"$PY" $S/render_compare.py VFR_Chart.pdf VFR_Chart_optimized.pdf --diff-map diff-map  # then open diff-map/index.html
 "$PY" $S/mutation_test.py VFR_Chart.pdf VFR_Chart_optimized.pdf
 ```
 

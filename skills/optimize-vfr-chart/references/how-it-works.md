@@ -7,6 +7,7 @@
 - [What the optimizer refuses](#what-the-optimizer-refuses)
 - [verify_chart.py: the exact check](#verify_chartpy-the-exact-check)
 - [render_compare.py: what real engines draw](#render_comparepy-what-real-engines-draw)
+- [The visual diff map](#the-visual-diff-map)
 - [mutation_test.py: checking the checkers](#mutation_testpy-checking-the-checkers)
 - [Limits](#limits)
 
@@ -125,6 +126,44 @@ and the render check is a second, independent line of evidence.
 
 The script also times opening and drawing the whole page at phone width (1600 px) for both files
 in each engine. Those are the numbers to report as the speed-up.
+
+## The visual diff map
+
+`render_compare.py --diff-map DIR` keeps the tiles it compares and writes them out as a map, in the
+spirit of the failure images of a golden test, with the source render as the golden image. It is
+built from exactly the pixels the render check judged, and it is for people: it does not change the
+verdict.
+
+- `index.html` is a viewer that works offline from the folder, with one tab per engine and four
+  views: **Diff** (the source faded to grey, each differing pixel coloured), **Side by side**,
+  **Swipe** and **Blink**. It zooms from the whole page down to single pixels, lists the changes
+  the render check found (numbered red boxes) and the 25 places with the largest pixel differences.
+- `overview-<engine>.png` is the Diff view of the whole page as one image.
+- `tiles/` holds lossless WebP (or PNG) tiles in a zoom pyramid; identical tiles are stored once.
+
+For a 15 MB chart at 216 dpi it costs about 10 seconds and 60 MB of disk per engine, and about
+0.6 GB of extra memory, because both full-page renders are kept until the map is written.
+
+A pixel's difference is the largest difference of its three colour channels, out of 255:
+
+| Colour | Difference | Typical cause on an equivalent file |
+| --- | --- | --- |
+| pale blue | 1 to 2 | rounding where shapes were moved into groups or lines were shortened outside their clip; invisible |
+| amber | 3 to 16 | anti-aliasing along a line drawn from different coordinates |
+| red | 17 to 64 | single pixels along thin lines, and where a line was cut into pieces with round joins |
+| magenta | 65 to 255 | the same, rarely; a solid patch of it means content changed |
+
+On the 15 MB Latvian chart, 97.4% (MuPDF) to 99.3% (PDFium) of the pixels are identical, and 95%
+or more of the rest differ by 16 or less. The largest single-pixel differences are 53 (PDFium),
+56 (MuPDF) and 146 (CoreGraphics). For scale, engines are not that stable on their own: drawing
+the same area of the *source* chart as part of a 40 pt region instead of a 500 pt tile changes
+single pixels by up to 145 in CoreGraphics and 119 in PDFium. That is why the render check
+blurs before it compares, and why single pixels are not evidence of a change.
+
+Zoomed out, the map shows the largest difference in each area (max pooling), so a single
+differing pixel is never averaged away; the viewer can hide the 1 to 2 level differences to make
+the rest stand out. Missing or added content looks different from all of this: a solid patch of
+strong colour in the shape of the symbol or label, which the render check also boxes.
 
 ## mutation_test.py: checking the checkers
 
